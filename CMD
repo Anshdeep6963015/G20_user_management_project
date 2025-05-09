@@ -1,0 +1,9 @@
+Commands /Steps to follow
+
+
+$ cd ~/G20_user_management_project  [to enter project branch]
+$ sudo ./user_management.sh [to start dialog box]
+$ cat /var/log/g20_user_management.log [to see log  file ]
+$ ./status.sh [to check  status]
+$grep "User added:" /var/log/g20_user_management.log [to see added user till date]
+
