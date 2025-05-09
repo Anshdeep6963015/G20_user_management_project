@@ -1,0 +1,120 @@
+#!/bin/bash
+
+if [ "$EUID" -ne 0 ]; then
+  dialog --msgbox "Please run this script as an administrator!" 8 50
+  clear
+  exit 1
+fi
+
+LOG_FILE="/var/log/g20_user_management.log"
+
+log_action() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+welcome_screen() {
+  dialog --title "Welcome to G20 Management System" \
+         --msgbox "👋 Welcome, Admin!\n\nManage users efficiently with our tool.\n\nPress OK to continue..." 10 50
+}
+
+add_user() {
+  username=$(dialog --inputbox "Enter new username:" 8 50 3>&1 1>&2 2>&3)
+  if id "$username" &>/dev/null; then
+    dialog --msgbox "User '$username' already exists!" 6 40
+  else
+    sudo useradd -m "$username"
+    if [ $? -eq 0 ]; then
+      password=$(dialog --passwordbox "Enter password for $username:" 8 50 3>&1 1>&2 2>&3)
+      echo "$username:$password" | sudo chpasswd
+      dialog --msgbox "User '$username' added successfully!" 6 50
+      log_action "User added: $username"
+    else
+      dialog --msgbox "Failed to add user!" 6 40
+    fi
+  fi
+}
+
+delete_user() {
+  username=$(dialog --inputbox "Enter username to delete:" 8 50 3>&1 1>&2 2>&3)
+  if id "$username" &>/dev/null; then
+    dialog --yesno "Are you sure you want to delete user '$username'?" 7 60
+    response=$?
+    if [ $response -eq 0 ]; then
+      sudo userdel -r "$username"
+      dialog --msgbox "User '$username' deleted." 6 40
+      log_action "User deleted: $username"
+    fi
+  else
+    dialog --msgbox "User '$username' does not exist!" 6 40
+  fi
+}
+
+modify_user() {
+  username=$(dialog --inputbox "Enter username to modify:" 8 50 3>&1 1>&2 2>&3)
+  if id "$username" &>/dev/null; then
+    action=$(dialog --menu "Select modification for $username:" 12 50 2 \
+      1 "Change Username" \
+      2 "Change Password" 3>&1 1>&2 2>&3)
+
+    case $action in
+      1)
+        new_username=$(dialog --inputbox "Enter new username for $username:" 8 50 3>&1 1>&2 2>&3)
+        sudo usermod -l "$new_username" "$username"
+        dialog --msgbox "Username changed from $username to $new_username." 6 50
+        log_action "Username changed: $username -> $new_username"
+        ;;
+      2)
+        new_password=$(dialog --passwordbox "Enter new password for $username:" 8 50 3>&1 1>&2 2>&3)
+        echo "$username:$new_password" | sudo chpasswd
+        dialog --msgbox "Password changed for $username." 6 50
+        log_action "Password changed for: $username"
+        ;;
+    esac
+  else
+    dialog --msgbox "User '$username' does not exist!" 6 40
+  fi
+}
+
+list_users() {
+  users=$(awk -F: '$3 >= 1000 && $1 != "nobody" { print "👤  " $1 }' /etc/passwd | sort)
+  dialog --msgbox "List of Users:\n\n$users" 20 60
+  log_action "Viewed user list"
+}
+
+view_logs() {
+  if [ -f "$LOG_FILE" ]; then
+    dialog --textbox "$LOG_FILE" 20 70
+  else
+    dialog --msgbox "Log file not found!" 6 40
+  fi
+}
+
+show_menu() {
+  dialog --clear --backtitle "🚀 G20 Bash User Management System" \
+    --title "📋 G20 User Management Menu" \
+    --menu "Choose an option:" 18 60 8 \
+    1 "➕  Add User" \
+    2 "❌  Delete User" \
+    3 "✏️   Modify User" \
+    4 "📄  List Users" \
+    5 "📜  View Logs" \
+    6 "🚪  Exit" 2>/tmp/menu_choice
+
+  choice=$(< /tmp/menu_choice)
+}
+
+welcome_screen
+
+while true; do
+  show_menu
+  case $choice in
+    1) add_user ;;
+    2) delete_user ;;
+    3) modify_user ;;
+    4) list_users ;;
+    5) view_logs ;;
+    6) clear; exit 0 ;;
+    *) dialog --msgbox "Invalid option. Try again." 6 30 ;;
+  esac
+done
+
